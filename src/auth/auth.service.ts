@@ -15,17 +15,21 @@ export class AuthService {
   ) {}
 
   async signIn(email: string, pass: string) {
-    const user = await this.usersService.user({ email });
+    const user = await this.usersService.findOne({ email });
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    if (!user || !(await bcrypt.compare(pass, user.password))) {
+    if (!(await bcrypt.compare(pass, user.password))) {
       throw new UnauthorizedException();
     }
 
-    const payload = { sub: user.userId, id: user.id, email: user.email };
+    if (!user.isEmailConfirmed) {
+      throw new UnauthorizedException('You need to confirm your email.');
+    }
+
+    const payload = { sub: user.id, id: user.id, email: user.email };
     return {
       access_token: await this.jwtService.signAsync(payload),
     };

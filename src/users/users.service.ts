@@ -1,25 +1,40 @@
-import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+// users.service.ts
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { Prisma, User as PrismaUser } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from 'src/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { JwtService } from '@nestjs/jwt';
+import { EmailService } from 'src/utils/email.service';
 
-// This should be a real class/interface representing a user entity
-export type User = any;
+export type User = PrismaUser;
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private jwtService: JwtService,
+    private emailService: EmailService,
+  ) {}
 
-  async user(
+  async findOne(
     userWhereUniqueInput: Prisma.UserWhereUniqueInput,
   ): Promise<User | null> {
-    return this.prisma.user.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: userWhereUniqueInput,
     });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return user;
   }
 
-  async users(params: {
+  async findMany(params: {
     skip?: number;
     take?: number;
     cursor?: Prisma.UserWhereUniqueInput;
@@ -36,15 +51,39 @@ export class UsersService {
     });
   }
 
-  async createUser(data: CreateUserDto): Promise<User> {
+  async createUser(data: CreateUserDto) {
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: data.email },
+    });
+
+    if (existingUser) {
+      const exception = existingUser.isEmailConfirmed
+        ? new ConflictException('User with this email already exists')
+        : new ConflictException('Please, confirm your email');
+      throw exception;
+    }
     const hashedPassword = await bcrypt.hash(data.password, 10);
 
-    return this.prisma.user.create({
+    const user = await this.prisma.user.create({
       data: {
         ...data,
         password: hashedPassword,
       },
     });
+
+    const payload = { sub: user.id, email: user.email };
+    const confirmationToken = await this.jwtService.signAsync(payload);
+    console.log(confirmationToken);
+
+    const text =
+      await this.emailService.getConfirmationLetter(confirmationToken);
+    await this.emailService.sendEmail({
+      to: user.email,
+      subject: 'Confirmation letter from nest-auth',
+      text,
+    });
+
+    return this.dumpUser(user);
   }
 
   async updateUser(params: {
@@ -64,9 +103,7 @@ export class UsersService {
     });
   }
 
-  async getUser(
-    userWhereUniqueInput: Prisma.UserWhereUniqueInput,
-  ): Promise<User | null> {
+  async getDumpedUser(userWhereUniqueInput: Prisma.UserWhereUniqueInput) {
     return this.dumpUser(
       await this.prisma.user.findUnique({
         where: userWhereUniqueInput,
@@ -80,5 +117,26 @@ export class UsersService {
       name: data.name,
       email: data.email,
     };
+  }
+
+  async verifyEmailToken(token: string) {
+    try {
+      const decodedToken = await this.jwtService.verifyAsync(token);
+      return decodedToken;
+    } catch (error) {
+      console.log(error);
+      throw new UnauthorizedException('Invalid token');
+    }
+  }
+
+  async confirmEmail(id: number) {
+    const updatedUser = await this.prisma.user.update({
+      where: { id },
+      data: { isEmailConfirmed: true },
+    });
+    const payload = { id: updatedUser.id, email: updatedUser.email };
+    const access_token = await this.jwtService.signAsync(payload);
+    console.log(access_token);
+    return access_token;
   }
 }

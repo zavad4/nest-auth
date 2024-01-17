@@ -1,11 +1,14 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   Request,
+  UnauthorizedException,
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
@@ -25,8 +28,24 @@ export class UsersController {
     return this.userService.createUser(signInDto);
   }
 
+  @SkipAuth()
+  @Get('confirm-email/:token')
+  async confirmEmail(@Param('token') token: string) {
+    try {
+      const decodedToken = await this.userService.verifyEmailToken(token);
+      console.log(decodedToken);
+      const access_token = await this.userService.confirmEmail(
+        decodedToken.sub,
+      );
+      return { access_token };
+    } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
+      throw new BadRequestException('Failed to confirm email');
+    }
+  }
+
   @Get('profile')
   getProfile(@Request() req) {
-    return this.userService.getUser({ email: req.user?.email });
+    return this.userService.getDumpedUser({ email: req.user?.email });
   }
 }
