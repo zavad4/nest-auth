@@ -8,13 +8,13 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
       - "${DB_PORT}:5432"
-  nest-server:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    depends_on:
-      - postgres
-    environment:
-      DATABASE_URL: postgres://${DB_USERNAME}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_DATABASE}
+  # nest-server:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "3000:3000"
+  #   depends_on:
+  #     - postgres
+  #   environment:
+  #     DATABASE_URL: postgres://${DB_USERNAME}:${DB_PASSWORD}@postgres:${DB_PORT}/${DB_DATABASE}
