@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
-import config from 'src/config';
+import config from '../config';
 
 interface MailOptions {
   to: string;
@@ -11,6 +11,7 @@ interface MailOptions {
 @Injectable()
 export class EmailService {
   private transporter: nodemailer.Transporter;
+  private readonly logger = new Logger(EmailService.name);
 
   constructor() {
     this.transporter = nodemailer.createTransport(
@@ -26,18 +27,18 @@ export class EmailService {
       html: text,
     };
 
+    this.logger.log(`Sent email confirmation letter to ${to}`);
     await this.transporter.sendMail(mailOptions);
   }
 
   async getConfirmationLetter(token) {
     const confirmationLink = `${config.baseUrl}/users/confirm-email/${token}`;
-
     const mailText = `
     <p>Welcome!</p>
     <p>To confirm your email, click the button below:</p>
     <p>
       <a href="${confirmationLink}" style="display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">
-        Confirm Email
+        Confirm email
       </a>
     </p>
   `;

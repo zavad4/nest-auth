@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class AuthService {
@@ -22,7 +22,7 @@ export class AuthService {
     }
 
     if (!(await bcrypt.compare(pass, user.password))) {
-      throw new UnauthorizedException();
+      throw new UnauthorizedException('Invalid login or password');
     }
 
     if (!user.isEmailConfirmed) {

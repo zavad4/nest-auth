@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Get,
@@ -8,7 +7,6 @@ import {
   Param,
   Post,
   Request,
-  UnauthorizedException,
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
@@ -31,17 +29,7 @@ export class UsersController {
   @SkipAuth()
   @Get('confirm-email/:token')
   async confirmEmail(@Param('token') token: string) {
-    try {
-      const decodedToken = await this.userService.verifyEmailToken(token);
-      console.log(decodedToken);
-      const access_token = await this.userService.confirmEmail(
-        decodedToken.sub,
-      );
-      return { access_token };
-    } catch (error) {
-      if (error instanceof UnauthorizedException) throw error;
-      throw new BadRequestException('Failed to confirm email');
-    }
+    return await this.userService.verifyEmailToken(token);
   }
 
   @Get('profile')

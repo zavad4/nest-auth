@@ -1,16 +1,17 @@
-// users.service.ts
 import {
-  ConflictException,
+  BadRequestException,
+  HttpException,
+  HttpStatus,
   Injectable,
+  Logger,
   NotFoundException,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { Prisma, User as PrismaUser } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
-import { PrismaService } from 'src/prisma.service';
+import * as bcrypt from 'bcryptjs';
+import { PrismaService } from '../prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { JwtService } from '@nestjs/jwt';
-import { EmailService } from 'src/utils/email.service';
+import { EmailService } from '../utils/email.service';
 
 export type User = PrismaUser;
 
@@ -22,9 +23,9 @@ export class UsersService {
     private emailService: EmailService,
   ) {}
 
-  async findOne(
-    userWhereUniqueInput: Prisma.UserWhereUniqueInput,
-  ): Promise<User | null> {
+  private readonly logger = new Logger(UsersService.name);
+
+  async findOne(userWhereUniqueInput: Prisma.UserWhereUniqueInput) {
     const user = await this.prisma.user.findUnique({
       where: userWhereUniqueInput,
     });
@@ -58,9 +59,9 @@ export class UsersService {
 
     if (existingUser) {
       const exception = existingUser.isEmailConfirmed
-        ? new ConflictException('User with this email already exists')
-        : new ConflictException('Please, confirm your email');
-      throw exception;
+        ? 'User with this email already exists'
+        : 'Please, confirm your email';
+      throw new HttpException(exception, HttpStatus.BAD_REQUEST);
     }
     const hashedPassword = await bcrypt.hash(data.password, 10);
 
@@ -73,7 +74,6 @@ export class UsersService {
 
     const payload = { sub: user.id, email: user.email };
     const confirmationToken = await this.jwtService.signAsync(payload);
-    console.log(confirmationToken);
 
     const text =
       await this.emailService.getConfirmationLetter(confirmationToken);
@@ -89,7 +89,7 @@ export class UsersService {
   async updateUser(params: {
     where: Prisma.UserWhereUniqueInput;
     data: Prisma.UserUpdateInput;
-  }): Promise<User> {
+  }) {
     const { where, data } = params;
     return this.prisma.user.update({
       data,
@@ -122,21 +122,20 @@ export class UsersService {
   async verifyEmailToken(token: string) {
     try {
       const decodedToken = await this.jwtService.verifyAsync(token);
-      return decodedToken;
+      return await this.confirmEmail(decodedToken.sub);
     } catch (error) {
-      console.log(error);
-      throw new UnauthorizedException('Invalid token');
+      this.logger.error(error);
+      throw new BadRequestException('Failed to confirm email');
     }
   }
 
   async confirmEmail(id: number) {
-    const updatedUser = await this.prisma.user.update({
-      where: { id },
+    const user = await this.findOne({ id });
+    await this.prisma.user.update({
+      where: { id: user.id },
       data: { isEmailConfirmed: true },
     });
-    const payload = { id: updatedUser.id, email: updatedUser.email };
-    const access_token = await this.jwtService.signAsync(payload);
-    console.log(access_token);
-    return access_token;
+
+    return 'Email was successfully confirmed.';
   }
 }
